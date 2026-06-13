@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 from pathlib import Path
@@ -5,20 +6,17 @@ from pathlib import Path
 import httpx
 from backend import (
     LANGUAGES,
-    list_ollama_models,
     list_llamacpp_models,
     list_lmstudio_models,
-    translate_srt_file,
-    start_llama_server,
-    stop_llama_server,
+    list_ollama_models,
     load_llamacpp_config,
     save_llamacpp_config,
+    translate_srt_file,
 )
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
-    QDialog,
     QFileDialog,
     QFormLayout,
     QGroupBox,
@@ -26,6 +24,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMessageBox,
     QProgressBar,
     QPushButton,
     QRadioButton,
@@ -33,127 +32,75 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
-    QMessageBox,
 )
 
 
-class LlamaCppConfigDialog(QDialog):
-    """配置对话框"""
+BACKEND_KEY_MAP = {
+    "ollama": "Ollama",
+    "llamacpp": "Llama.cpp",
+    "lmstudio": "Lmstudio",
+}
 
-    def __init__(self, parent=None, config=None):
-        super().__init__(parent)
-        self.setWindowTitle("配置")
-        self.setMinimumWidth(500)
-        self.config = config or load_llamacpp_config()
-        self._init_ui()
+BACKEND_DEFAULTS = {
+    "Ollama": ("127.0.0.1", 11434),
+    "Llama.cpp": ("127.0.0.1", 11433),
+    "Lmstudio": ("127.0.0.1", 1234),
+}
 
-    def _init_ui(self):
+
+class ConfigWindow(QWidget):
+    """单个后端配置窗口（独立浮动窗口）"""
+
+    def __init__(self, backend_key, parent=None):
+        super().__init__(parent, Qt.Window)
+        self.backend_key = backend_key
+        self.setWindowTitle(f"{backend_key} 配置")
+        self.setMinimumWidth(300)
+        config = load_llamacpp_config()
+        default_host, default_port = BACKEND_DEFAULTS.get(backend_key, ("127.0.0.1", 11434))
+        cfg = config.get(backend_key, {})
+        self._init_ui(cfg.get("host", default_host), cfg.get("port", default_port))
+
+    def _init_ui(self, host, port):
         layout = QVBoxLayout(self)
-
-        # llamacpp 配置组
-        llamacpp_group = QGroupBox("llamacpp 配置")
-        llamacpp_layout = QFormLayout()
-
-        self.edit_executable = QLineEdit(self.config.get("executable", ""))
-        self.edit_executable.setPlaceholderText("llama-server 可执行文件路径")
-        btn_browse_exe = QPushButton("浏览")
-        btn_browse_exe.clicked.connect(self._browse_executable)
-        exe_layout = QHBoxLayout()
-        exe_layout.addWidget(self.edit_executable)
-        exe_layout.addWidget(btn_browse_exe)
-        llamacpp_layout.addRow("可执行文件:", exe_layout)
-
-        self.edit_model_dir = QLineEdit(self.config.get("model_dir", ""))
-        self.edit_model_dir.setPlaceholderText("模型文件目录")
-        btn_browse_dir = QPushButton("浏览")
-        btn_browse_dir.clicked.connect(self._browse_model_dir)
-        dir_layout = QHBoxLayout()
-        dir_layout.addWidget(self.edit_model_dir)
-        dir_layout.addWidget(btn_browse_dir)
-        llamacpp_layout.addRow("模型目录:", dir_layout)
-
+        group = QGroupBox(self.backend_key)
+        form = QFormLayout()
         self.spin_port = QSpinBox()
         self.spin_port.setRange(1024, 65535)
-        self.spin_port.setValue(self.config.get("port", 11433))
-        llamacpp_layout.addRow("端口号:", self.spin_port)
-
-        self.edit_host = QLineEdit(self.config.get("host", "127.0.0.1"))
+        self.spin_port.setValue(port)
+        form.addRow("端口:", self.spin_port)
+        self.edit_host = QLineEdit(host)
         self.edit_host.setPlaceholderText("服务器 IP")
-        llamacpp_layout.addRow("IP 地址:", self.edit_host)
-
-        self.spin_gpu_layers = QSpinBox()
-        self.spin_gpu_layers.setRange(0, 1000)
-        self.spin_gpu_layers.setValue(self.config.get("n_gpu_layers", 30))
-        llamacpp_layout.addRow("GPU 层数:", self.spin_gpu_layers)
-
-        self.spin_ctx_size = QSpinBox()
-        self.spin_ctx_size.setRange(512, 131072)
-        self.spin_ctx_size.setSingleStep(1024)
-        self.spin_ctx_size.setValue(self.config.get("ctx_size", 4096))
-        llamacpp_layout.addRow("上下文窗口:", self.spin_ctx_size)
-
-        llamacpp_group.setLayout(llamacpp_layout)
-        layout.addWidget(llamacpp_group)
-
-        # LM-Studio 配置组
-        lmstudio_group = QGroupBox("LM-Studio 配置")
-        lmstudio_layout = QFormLayout()
-
-        self.spin_lmstudio_port = QSpinBox()
-        self.spin_lmstudio_port.setRange(1024, 65535)
-        self.spin_lmstudio_port.setValue(self.config.get("lmstudio_port", 1234))
-        lmstudio_layout.addRow("端口号:", self.spin_lmstudio_port)
-
-        self.edit_lmstudio_host = QLineEdit(self.config.get("lmstudio_host", "127.0.0.1"))
-        self.edit_lmstudio_host.setPlaceholderText("服务器 IP")
-        lmstudio_layout.addRow("IP 地址:", self.edit_lmstudio_host)
-
-        lmstudio_group.setLayout(lmstudio_layout)
-        layout.addWidget(lmstudio_group)
+        form.addRow("IP:", self.edit_host)
+        group.setLayout(form)
+        layout.addWidget(group)
+        layout.addStretch()
 
         btn_layout = QHBoxLayout()
         btn_save = QPushButton("保存")
         btn_save.clicked.connect(self._save)
         btn_cancel = QPushButton("取消")
-        btn_cancel.clicked.connect(self.reject)
+        btn_cancel.clicked.connect(self.close)
         btn_layout.addWidget(btn_save)
         btn_layout.addWidget(btn_cancel)
         layout.addLayout(btn_layout)
 
-    def _browse_executable(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self, "选择 llama-server 可执行文件"
-        )
-        if path:
-            self.edit_executable.setText(path)
-
-    def _browse_model_dir(self):
-        path = QFileDialog.getExistingDirectory(self, "选择模型目录")
-        if path:
-            self.edit_model_dir.setText(path)
-
     def _save(self):
-        self.config = {
-            "executable": self.edit_executable.text().strip(),
-            "model_dir": self.edit_model_dir.text().strip(),
-            "port": self.spin_port.value(),
-            "n_gpu_layers": self.spin_gpu_layers.value(),
-            "ctx_size": self.spin_ctx_size.value(),
-            "lmstudio_port": self.spin_lmstudio_port.value(),
-            "host": self.edit_host.text().strip() or "127.0.0.1",
-            "lmstudio_host": self.edit_lmstudio_host.text().strip() or "127.0.0.1",
-        }
-        if not self.config["executable"]:
-            QMessageBox.warning(self, "提示", "请填写可执行文件路径")
-            return
-        if not self.config["model_dir"]:
-            QMessageBox.warning(self, "提示", "请填写模型目录")
-            return
-        save_llamacpp_config(self.config)
-        self.accept()
+        from backend import CONFIG_FILE
 
-    def get_config(self):
-        return self.config
+        config = {}
+        if CONFIG_FILE.exists():
+            try:
+                with open(CONFIG_FILE) as f:
+                    config = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                config = {}
+        config[self.backend_key] = {
+            "port": self.spin_port.value(),
+            "host": self.edit_host.text().strip() or BACKEND_DEFAULTS.get(self.backend_key, ("127.0.0.1", 11434))[0],
+        }
+        save_llamacpp_config(config)
+        self.close()
 
 
 class TranslationWorker(QThread):
@@ -194,26 +141,24 @@ class TranslationWorker(QThread):
         self.log_msg.emit(f"共 {total} 个文件，开始翻译...")
 
         if self.backend == "llamacpp":
-            self.log_msg.emit("正在启动 llama-server...")
             config = self.config
-            host = config.get("host", "127.0.0.1")
-            if not start_llama_server(
-                self.model_name,
-                model_dir=config.get("model_dir", "/mnt/D/llama/models"),
-                host=host,
-                port=config.get("port", 11433),
-                n_gpu_layers=config.get("n_gpu_layers", 30),
-                ctx_size=config.get("ctx_size", 4096),
-                executable=config.get("executable", "/mnt/D/llama/llama-server"),
-            ):
-                self.log_msg.emit("启动 llama-server 失败，翻译中止。")
+            host = config.get("Llama.cpp", {}).get("host", "127.0.0.1")
+            port = config.get("Llama.cpp", {}).get("port", 11433)
+            try:
+                response = httpx.get(f"http://{host}:{port}/v1/models", timeout=2.0)
+                if response.status_code != 200:
+                    self.log_msg.emit("无法连接到 llama-server，请确保服务已启动。")
+                    self.finished.emit("failed")
+                    return
+            except (httpx.RequestError, httpx.HTTPStatusError):
+                self.log_msg.emit("无法连接到 llama-server，请确保服务已启动。")
                 self.finished.emit("failed")
                 return
             self.log_msg.emit("llama-server 已就绪。")
         elif self.backend == "lmstudio":
             config = self.config
-            host = config.get("lmstudio_host", "127.0.0.1")
-            port = config.get("lmstudio_port", 1234)
+            host = config.get("Lmstudio", {}).get("host", "127.0.0.1")
+            port = config.get("Lmstudio", {}).get("port", 1234)
             try:
                 response = httpx.get(f"http://{host}:{port}/v1/models", timeout=2.0)
                 if response.status_code != 200:
@@ -251,8 +196,15 @@ class TranslationWorker(QThread):
 
                 try:
                     config = self.config
-                    host = config.get("host", "127.0.0.1") if self.backend == "llamacpp" else config.get("lmstudio_host", "127.0.0.1")
-                    port = config.get("port", 11433) if self.backend == "llamacpp" else config.get("lmstudio_port", 1234)
+                    if self.backend == "llamacpp":
+                        host = config.get("Llama.cpp", {}).get("host", "127.0.0.1")
+                        port = config.get("Llama.cpp", {}).get("port", 11433)
+                    elif self.backend == "lmstudio":
+                        host = config.get("Lmstudio", {}).get("host", "127.0.0.1")
+                        port = config.get("Lmstudio", {}).get("port", 1234)
+                    else:
+                        host = config.get("Ollama", {}).get("host", "127.0.0.1")
+                        port = config.get("Ollama", {}).get("port", 11434)
                     translate_srt_file(
                         srt_path=file_path,
                         target_lang=self.target_lang,
@@ -269,11 +221,8 @@ class TranslationWorker(QThread):
                     )
                 except (OSError, RuntimeError, ValueError) as e:
                     self.log_msg.emit(f"翻译失败 {fname}: {e}")
-        finally:
-            if self.backend == "llamacpp":
-                self.log_msg.emit("正在停止 llama-server...")
-                stop_llama_server()
-                self.log_msg.emit("llama-server 已停止。")
+        except Exception as e:
+            self.log_msg.emit(f"翻译过程出错: {e}")
 
         self.progress.emit(total, total)
         self.log_msg.emit("全部完成。")
@@ -374,7 +323,7 @@ class MainWindow(QMainWindow):
         backend_layout = QVBoxLayout()
         backend_layout.addWidget(QLabel("后端:"))
         self.combo_backend = QComboBox()
-        self.combo_backend.addItems(["ollama", "llamacpp", "lmstudio"])
+        self.combo_backend.addItems(["无", "ollama", "llamacpp", "lmstudio"])
         self.combo_backend.currentTextChanged.connect(self._on_backend_changed)
         backend_layout.addWidget(self.combo_backend)
         mode_layout.addLayout(backend_layout)
@@ -427,38 +376,46 @@ class MainWindow(QMainWindow):
         progress_group.setLayout(progress_layout)
         layout.addWidget(progress_group)
 
+        # ── 配置窗口（每后端独立浮动） ──
+        self.config_wins = {
+            b: ConfigWindow(BACKEND_KEY_MAP[b], self)
+            for b in ["ollama", "llamacpp", "lmstudio"]
+        }
+        for w in self.config_wins.values():
+            w.hide()
+
         # ── 初始化 ──
         self.worker = None
-        self._fetch_models()
+        self._on_backend_changed(self.combo_backend.currentText())
 
     def _fetch_models(self):
         self.combo_model.clear()
         backend = self.combo_backend.currentText()
-        
+
         if backend == "ollama":
-            models = list_ollama_models()
+            config = load_llamacpp_config()
+            host = config.get("Ollama", {}).get("host", "127.0.0.1")
+            port = config.get("Ollama", {}).get("port", 11434)
+            models = list_ollama_models(host=host, port=port)
             if models:
                 self.combo_model.addItems(models)
                 self.log(f"已加载 {len(models)} 个 Ollama 模型。")
             else:
-                self.combo_model.addItems(["translategemma:27b", "translategemma:12b", "translategemma:4b"])
-                self.log("未检测到 Ollama，使用默认模型列表。")
+                self.log("未检测到 Ollama，请确保服务已启动。")
         elif backend == "llamacpp":
             config = load_llamacpp_config()
-            models = list_llamacpp_models(
-                port=config.get("port", 11433),
-                model_dir=config.get("model_dir", "/mnt/D/llama/models"),
-            )
+            host = config.get("Llama.cpp", {}).get("host", "127.0.0.1")
+            port = config.get("Llama.cpp", {}).get("port", 11433)
+            models = list_llamacpp_models(host=host, port=port)
             if models:
                 self.combo_model.addItems(models)
                 self.log(f"已加载 {len(models)} 个可用模型。")
             else:
-                self.combo_model.addItems(["Hy-MT2-1.8B-Q8_0"])
-                self.log("未找到可用模型，使用默认模型列表。")
+                self.log("未检测到 llama-server 或无可用模型。")
         elif backend == "lmstudio":
             config = load_llamacpp_config()
-            host = config.get("lmstudio_host", "127.0.0.1")
-            port = config.get("lmstudio_port", 1234)
+            host = config.get("Lmstudio", {}).get("host", "127.0.0.1")
+            port = config.get("Lmstudio", {}).get("port", 1234)
             models = list_lmstudio_models(host=host, port=port)
             if models:
                 self.combo_model.addItems(models)
@@ -497,30 +454,37 @@ class MainWindow(QMainWindow):
             self.lbl_lang.setText("源语言:")
 
     def _on_backend_changed(self, text):
-        if text == "llamacpp":
-            config = load_llamacpp_config()
-            from backend import CONFIG_FILE
-            if not CONFIG_FILE.exists():
-                dialog = LlamaCppConfigDialog(self, config)
-                if dialog.exec() != QDialog.Accepted:
-                    self.combo_backend.setCurrentText("ollama")
-                    return
-        elif text == "lmstudio":
-            from backend import CONFIG_FILE
-            if not CONFIG_FILE.exists():
-                config = load_llamacpp_config()
-                dialog = LlamaCppConfigDialog(self, config)
-                if dialog.exec() != QDialog.Accepted:
-                    self.combo_backend.setCurrentText("ollama")
-                    return
+        if text == "无":
+            self.combo_model.clear()
+            return
+
+        from backend import CONFIG_FILE
+
+        key = BACKEND_KEY_MAP.get(text)
+        show = False
+        if CONFIG_FILE.exists():
+            try:
+                with open(CONFIG_FILE) as f:
+                    data = json.load(f)
+                if key not in data or not isinstance(data.get(key), dict):
+                    show = True
+            except (json.JSONDecodeError, OSError):
+                show = True
+        else:
+            show = True
+        if show:
+            win = self.config_wins.get(text)
+            if win:
+                win.show()
+                win.raise_()
         self._fetch_models()
 
     def _check_lmstudio_connection(self, config=None):
         """检查 LM-Studio 连接"""
         if config is None:
             config = load_llamacpp_config()
-        host = config.get("lmstudio_host", "127.0.0.1")
-        port = config.get("lmstudio_port", 1234)
+        host = config.get("Lmstudio", {}).get("host", "127.0.0.1")
+        port = config.get("Lmstudio", {}).get("port", 1234)
         try:
             response = httpx.get(f"http://{host}:{port}/v1/models", timeout=2.0)
             return response.status_code == 200
@@ -571,7 +535,10 @@ class MainWindow(QMainWindow):
 
         model_name = self.combo_model.currentText()
         backend = self.combo_backend.currentText()
-        
+        if backend == "无":
+            self._log("错误: 请选择翻译后端。")
+            return
+
         config = load_llamacpp_config() if backend in ["llamacpp", "lmstudio"] else {}
 
         self.btn_start.setEnabled(False)
