@@ -34,7 +34,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-
 BACKEND_KEY_MAP = {
     "ollama": "Ollama",
     "llamacpp": "Llama.cpp",
@@ -57,7 +56,9 @@ class ConfigWindow(QWidget):
         self.setWindowTitle(f"{backend_key} 配置")
         self.setMinimumWidth(300)
         config = load_llamacpp_config()
-        default_host, default_port = BACKEND_DEFAULTS.get(backend_key, ("127.0.0.1", 11434))
+        default_host, default_port = BACKEND_DEFAULTS.get(
+            backend_key, ("127.0.0.1", 11434)
+        )
         cfg = config.get(backend_key, {})
         self._init_ui(cfg.get("host", default_host), cfg.get("port", default_port))
 
@@ -97,7 +98,8 @@ class ConfigWindow(QWidget):
                 config = {}
         config[self.backend_key] = {
             "port": self.spin_port.value(),
-            "host": self.edit_host.text().strip() or BACKEND_DEFAULTS.get(self.backend_key, ("127.0.0.1", 11434))[0],
+            "host": self.edit_host.text().strip()
+            or BACKEND_DEFAULTS.get(self.backend_key, ("127.0.0.1", 11434))[0],
         }
         save_llamacpp_config(config)
         self.close()
@@ -386,6 +388,7 @@ class MainWindow(QMainWindow):
 
         # ── 初始化 ──
         self.worker = None
+        self._restore_last_backend()
         self._on_backend_changed(self.combo_backend.currentText())
 
     def _fetch_models(self):
@@ -453,12 +456,30 @@ class MainWindow(QMainWindow):
         else:
             self.lbl_lang.setText("源语言:")
 
+    def _restore_last_backend(self):
+        from backend import CONFIG_FILE
+
+        if CONFIG_FILE.exists():
+            try:
+                with open(CONFIG_FILE) as f:
+                    config = json.load(f)
+                last = config.get("_last_backend", "")
+                if last:
+                    idx = self.combo_backend.findText(last)
+                    if idx >= 0:
+                        self.combo_backend.setCurrentIndex(idx)
+                        return
+            except (json.JSONDecodeError, OSError):
+                pass
+
     def _on_backend_changed(self, text):
         if text == "无":
             self.combo_model.clear()
             return
 
         from backend import CONFIG_FILE
+
+        self._save_last_backend(text)
 
         key = BACKEND_KEY_MAP.get(text)
         show = False
@@ -478,6 +499,21 @@ class MainWindow(QMainWindow):
                 win.show()
                 win.raise_()
         self._fetch_models()
+
+    def _save_last_backend(self, backend):
+        from backend import CONFIG_FILE
+
+        config = {}
+        if CONFIG_FILE.exists():
+            try:
+                with open(CONFIG_FILE) as f:
+                    config = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                config = {}
+        config["_last_backend"] = backend
+        from backend import save_llamacpp_config
+
+        save_llamacpp_config(config)
 
     def _check_lmstudio_connection(self, config=None):
         """检查 LM-Studio 连接"""
