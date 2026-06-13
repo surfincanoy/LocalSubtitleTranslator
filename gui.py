@@ -49,6 +49,7 @@ BACKEND_DEFAULTS = {
 
 class ConfigWindow(QWidget):
     """单个后端配置窗口（独立浮动窗口）"""
+    saved = Signal()
 
     def __init__(self, backend_key, parent=None):
         super().__init__(parent, Qt.Window)
@@ -102,6 +103,7 @@ class ConfigWindow(QWidget):
             or BACKEND_DEFAULTS.get(self.backend_key, ("127.0.0.1", 11434))[0],
         }
         save_llamacpp_config(config)
+        self.saved.emit()
         self.close()
 
 
@@ -385,6 +387,7 @@ class MainWindow(QMainWindow):
         }
         for w in self.config_wins.values():
             w.hide()
+            w.saved.connect(self._fetch_models)
 
         # ── 初始化 ──
         self.worker = None
@@ -498,6 +501,7 @@ class MainWindow(QMainWindow):
             if win:
                 win.show()
                 win.raise_()
+                return
         self._fetch_models()
 
     def _save_last_backend(self, backend):
