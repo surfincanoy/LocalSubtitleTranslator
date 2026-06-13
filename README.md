@@ -1,6 +1,9 @@
 <div align="center">
 
+# SRT Subtitle Translation Tool
 # SRT 字幕翻译工具
+
+A PySide6 GUI tool for batch-translating SRT subtitle files between Chinese and 37 other languages, powered by Ollama / llama.cpp / LM-Studio backends.
 
 基于 Ollama / llama.cpp / LM-Studio 的 SRT 字幕批量翻译工具，支持 37 种语言与中文互译。
 
@@ -8,30 +11,187 @@
 
 ---
 
-## 功能特性
+[English](#english) | [中文](#中文)
 
-- **多语言支持** — 英语、日语、法语、德语、西班牙语等 37 种语言与中文互译
-- **并发翻译** — 可配置并发数，多条字幕同时翻译，提升效率
-- **双语字幕** — 支持输出仅译文、双语（译文在上）、双语（原文在上）三种模式
-- **批量处理** — 支持选择多个 SRT 文件一次性翻译
-- **多后端支持** — 支持 Ollama、llama.cpp、LM-Studio 三种后端
-- **GPU 加速** — llama.cpp 支持 GPU 加速推理
-- **配置管理** — 首次使用自动弹出配置对话框，配置保存到文件
-- **简洁界面** — 基于 PySide6 的图形化操作界面
+---
 
-## 环境要求
+<a id="english"></a>
 
-- Python 3.10+
-- 以下任一翻译后端：
-  - [Ollama](https://ollama.com/) 已安装并运行
-  - [llama.cpp](https://github.com/ggerganov/llama.cpp) 已编译
-  - [LM-Studio](https://lmstudio.ai/) 已安装并运行
+## English
 
-## 安装
+### Features
+
+- **37 languages** — Bidirectional translation between Chinese and English, Japanese, French, German, Spanish, and more
+- **Concurrent translation** — Configurable parallelism for faster batch processing
+- **Bilingual subtitles** — Three output modes: translation only, bilingual (translation on top), bilingual (original on top)
+- **Batch processing** — Translate multiple SRT files at once
+- **Three backends** — Ollama, llama.cpp, LM-Studio, each independently configurable
+- **Floating config panel** — Per-backend IP/port configuration in independent floating windows
+- **Persistent selection** — Last-used backend is remembered across sessions
+- **Clean GUI** — Built with PySide6
+
+### Requirements
+
+- Python 3.12+
+- One of the following translation backends (manually started):
+  - [Ollama](https://ollama.com/)
+  - [llama.cpp](https://github.com/ggerganov/llama.cpp) (llama-server)
+  - [LM-Studio](https://lmstudio.ai/)
+
+### Installation
 
 ```bash
-# 克隆项目 或者 下载zip包
-# 进入项目目录
+# Clone or download the project
+cd LocalSubtitleTranslator
+
+# Create virtual environment
+uv venv --python 3.12
+
+# Install dependencies
+uv pip install -r requirements.txt
+```
+
+### Backend Setup
+
+All backends are started by the user before running the tool. The tool only connects to them via HTTP API — it does not manage backend processes.
+
+**Ollama**
+
+```bash
+ollama pull translategemma:4b    # Install a translation model
+ollama serve                      # Start the server (default port 11434)
+```
+
+**llama.cpp**
+
+```bash
+Download and load model files yourself: recommended companion Repositories：
+https://github.com/surfincanoy/Llama-cpp-Launcher
+```
+
+**LM-Studio**
+
+1. Download and install [LM-Studio](https://lmstudio.ai/)
+2. Load a model and start the local server (default port 1234)
+
+### Usage
+
+```bash
+uv run gui.py
+```
+
+1. **Select files** — Click "Browse" to choose one or more `.srt` subtitle files
+2. **Select output directory** — Choose where translated files are saved
+3. **Translation direction** — 中译多 (Chinese → other) or 多译中 (other → Chinese)
+4. **Target language** — Select from the dropdown
+5. **Concurrency** — Number of simultaneous translations (default: 4)
+6. **Backend** — Select Ollama, llamacpp, lmstudio, or 无 (None)
+7. **Config** — If no config exists for the selected backend, a floating config window pops up. Set IP and port, click Save.
+8. **Model** — Select from available models
+9. **Output mode** — Translation only, bilingual (translation on top), or bilingual (original on top)
+10. **Start** — Click "开始翻译"
+
+### Configuration
+
+Configuration is stored in `llamacpp_config.json` in the project root.
+
+Each backend is configured independently. When you select a backend that hasn't been configured yet, a floating config window appears. Clicking **Save** writes only that backend's entry to the config file. Switching backends does not overwrite other backends' settings.
+
+```json
+{
+  "Ollama": {
+    "host": "127.0.0.1",
+    "port": 11434
+  },
+  "Llama.cpp": {
+    "host": "127.0.0.1",
+    "port": 11433
+  },
+  "Lmstudio": {
+    "host": "127.0.0.1",
+    "port": 1234
+  },
+  "_last_backend": "ollama"
+}
+```
+
+| Field | Description | Default |
+|---|---|---|
+| `Ollama.host` | Ollama server IP | `127.0.0.1` |
+| `Ollama.port` | Ollama server port | `11434` |
+| `Llama.cpp.host` | llama-server IP | `127.0.0.1` |
+| `Llama.cpp.port` | llama-server port | `11433` |
+| `Lmstudio.host` | LM-Studio IP | `127.0.0.1` |
+| `Lmstudio.port` | LM-Studio port | `1234` |
+| `_last_backend` | Last selected backend on startup | (empty = 无) |
+
+Config behavior:
+- **First run** — The config file is not created automatically. When you select a backend and click Save in its config window, only that backend's entry is written.
+- **Per-backend saves** — Saving Ollama's config writes `{"Ollama": {...}}`. Saving LM-Studio later appends the `Lmstudio` entry without overwriting `Ollama`.
+- **Manual editing** — You can edit `llamacpp_config.json` directly. The tool reads it at runtime.
+- **Delete config** — Deleting the file causes the config window to appear again when a backend is selected.
+
+### Project Structure
+
+```
+HYMT/
+├── backend.py              # Translation backend (API calls, SRT parsing, concurrency)
+├── gui.py                  # PySide6 GUI (main window, config windows, worker thread)
+├── requirements.txt        # Python dependencies
+├── llamacpp_config.json    # Backend config (created on first Save)
+└── README.md
+```
+
+### Output File Naming
+
+| Mode | File name format | Example |
+|---|---|---|
+| Translation only | `{filename}_{lang_code}.srt` | `video_zh.srt`, `video_ja.srt` |
+| Bilingual | `{filename}_bilingual_{lang_code}.srt` | `video_bilingual_zh.srt` |
+
+Language codes follow ISO 639-1: `zh`=Chinese, `en`=English, `ja`=Japanese, `fr`=French, `de`=German, etc.
+
+### Dependencies
+
+| Package | Purpose |
+|---|---|
+| `PySide6` | GUI framework |
+| `httpx` | HTTP client for backend API calls |
+| `srt` | SRT subtitle file parsing and generation |
+
+### License
+
+MIT License
+
+---
+
+<a id="中文"></a>
+
+## 中文
+
+### 功能特性
+
+- **37 种语言** — 英语、日语、法语、德语、西班牙语等与中文双向互译
+- **并发翻译** — 可配置并发数，多条字幕同时翻译，提升效率
+- **双语字幕** — 三种输出模式：仅译文、双语（译文在上）、双语（原文在上）
+- **批量处理** — 支持选择多个 SRT 文件一次性翻译
+- **三种后端** — Ollama、llama.cpp、LM-Studio，每个后端独立配置
+- **浮动配置面板** — 每个后端有独立的 IP/端口配置浮动窗口
+- **持久化选择** — 记住上次使用的后端，下次启动自动恢复
+- **简洁界面** — 基于 PySide6 的图形化操作界面
+
+### 环境要求
+
+- Python 3.12+
+- 以下任一翻译后端（需手动启动）：
+  - [Ollama](https://ollama.com/)
+  - [llama.cpp](https://github.com/ggerganov/llama.cpp)（llama-server）
+  - [LM-Studio](https://lmstudio.ai/)
+
+### 安装
+
+```bash
+# 克隆项目或下载 zip 包
 cd HYMT
 
 # 创建虚拟环境
@@ -41,125 +201,117 @@ uv venv --python 3.12
 uv pip install -r requirements.txt
 ```
 
-## 后端配置
+### 后端配置
 
-### Ollama
+所有后端均由用户在运行工具前手动启动。工具仅通过 HTTP API 连接，不管理后端进程。
+
+**Ollama**
 
 ```bash
-# 安装翻译模型
-ollama pull translategemma:4b
+ollama pull translategemma:4b    # 安装翻译模型
+ollama serve                      # 启动服务（默认端口 11434）
 ```
 
-### llama.cpp
+**llama.cpp**
 
-1. 编译 llama.cpp：
 ```bash
-# 下载源码
 git clone https://github.com/ggerganov/llama.cpp
 cd llama.cpp
-
-# 编译（支持 CUDA）
-cmake -B build -DGGML_CUDA=ON
+cmake -B build -DGGML_CUDA=ON    # 启用 CUDA
 cmake --build build --config Release
+./build/bin/llama-server -m /path/to/model.gguf   # 启动服务（默认端口 11433）
 ```
 
-2. 下载 GGUF 模型文件到指定目录（如 `/mnt/D/llama/models`）
-
-3. 首次使用时，在配置对话框中设置：
-   - 可执行文件路径
-   - 模型目录
-   - 端口号
-   - GPU 层数
-   - 上下文窗口
-
-### LM-Studio
+**LM-Studio**
 
 1. 下载并安装 [LM-Studio](https://lmstudio.ai/)
-2. 启动 LM-Studio 并加载模型
-3. 首次使用时，在配置对话框中设置端口号（默认 1234）
+2. 加载模型并启动本地服务（默认端口 1234）
 
-## 使用方法
-
-### 启动 GUI
+### 使用方法
 
 ```bash
-python gui.py
+uv run gui.py
 ```
-
-### 操作步骤
 
 1. **选择文件** — 点击"浏览"选择一个或多个 `.srt` 字幕文件
 2. **选择输出目录** — 设置翻译后文件的保存位置
-3. **设置翻译方向**
-   - **中译多**：中文 → 其他语言
-   - **多译中**：其他语言 → 中文
-4. **选择目标语言** — 从下拉框选择翻译的语言
-5. **选择后端** — 选择 Ollama、llamacpp 或 lmstudio
-6. **选择模型** — 从下拉框选择可用模型
-7. **设置并发数** — 同时翻译的字幕条数（默认 4）
-8. **选择输出模式**
-   - 仅译文
-   - 双语（译文在上）
-   - 双语（原文在上）
-9. **开始翻译** — 点击"开始翻译"按钮
+3. **翻译方向** — 中译多（中文→其他语言）或多译中（其他语言→中文）
+4. **目标语言** — 从下拉框选择翻译的语言
+5. **并发数** — 同时翻译的字幕条数（默认 4）
+6. **后端** — 选择 ollama、llamacpp、lmstudio 或 无
+7. **配置** — 选择后端后，若该后端尚未配置，会自动弹出浮动配置窗口。设置 IP 和端口后点击"保存"。
+8. **模型** — 从下拉框选择可用模型
+9. **输出模式** — 仅译文、双语（译文在上）、双语（原文在上）
+10. **开始翻译** — 点击"开始翻译"按钮
 
-## 配置文件
+### 配置文件
 
-配置文件位于项目目录下 `llamacpp_config.json`：
+配置文件位于项目目录下 `llamacpp_config.json`。
+
+每个后端独立配置。选择未配置的后端时，会弹出浮动配置窗口。点击"保存"仅写入当前后端的条目，不会覆盖其他后端的配置。
 
 ```json
 {
-  "executable": "/mnt/D/llama/llama-server",
-  "model_dir": "/mnt/D/llama/models",
-  "port": 11433,
-  "n_gpu_layers": 30,
-  "ctx_size": 4096,
-  "lmstudio_port": 1234,
-  "host": "127.0.0.1",
-  "lmstudio_host": "127.0.0.1"
+  "Ollama": {
+    "host": "127.0.0.1",
+    "port": 11434
+  },
+  "Llama.cpp": {
+    "host": "127.0.0.1",
+    "port": 11433
+  },
+  "Lmstudio": {
+    "host": "127.0.0.1",
+    "port": 1234
+  },
+  "_last_backend": "ollama"
 }
 ```
 
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `executable` | llama-server 可执行文件路径 | `/mnt/D/llama/llama-server` |
-| `model_dir` | 模型文件目录 | `/mnt/D/llama/models` |
-| `port` | llama-server 端口号 | `11433` |
-| `n_gpu_layers` | GPU 加速层数 | `30` |
-| `ctx_size` | 上下文窗口大小 | `4096` |
-| `lmstudio_port` | LM-Studio 端口号 | `1234` |
-| `host` | llama-server IP 地址 | `127.0.0.1` |
-| `lmstudio_host` | LM-Studio IP 地址 | `127.0.0.1` |
+| 字段 | 说明 | 默认值 |
+|---|---|---|
+| `Ollama.host` | Ollama 服务器 IP | `127.0.0.1` |
+| `Ollama.port` | Ollama 端口 | `11434` |
+| `Llama.cpp.host` | llama-server IP | `127.0.0.1` |
+| `Llama.cpp.port` | llama-server 端口 | `11433` |
+| `Lmstudio.host` | LM-Studio IP | `127.0.0.1` |
+| `Lmstudio.port` | LM-Studio 端口 | `1234` |
+| `_last_backend` | 启动时默认选择的后端 | （空 = 无） |
 
-## 项目结构
+配置行为：
+- **首次运行** — 不会自动创建配置文件。选择后端并在配置窗口中点击"保存"后，仅写入该后端的条目。
+- **按后端保存** — 保存 Ollama 配置写入 `{"Ollama": {...}}`，之后保存 LM-Studio 配置会追加 `Lmstudio` 条目，不会覆盖 Ollama。
+- **手动编辑** — 可直接编辑 `llamacpp_config.json`，工具运行时会读取。
+- **删除配置** — 删除文件后，下次选择该后端时配置窗口会再次弹出。
+
+### 项目结构
 
 ```
 HYMT/
-├── backend.py              # 翻译后端（Ollama/llama.cpp/LM-Studio API 调用）
-├── gui.py                  # PySide6 图形界面
+├── backend.py              # 翻译后端（API 调用、SRT 解析、并发控制）
+├── gui.py                  # PySide6 图形界面（主窗口、配置窗口、工作线程）
 ├── requirements.txt        # Python 依赖
-├── llamacpp_config.json    # 配置文件（自动生成）
+├── llamacpp_config.json    # 后端配置（首次保存时创建）
 └── README.md
 ```
 
-## 输出文件命名
+### 输出文件命名
 
 | 模式 | 文件名格式 | 示例 |
-|------|-----------|------|
+|---|---|---|
 | 仅译文 | `原文件名_{语言代码}.srt` | `video_zh.srt`、`video_ja.srt` |
 | 双语 | `原文件名_bilingual_{语言代码}.srt` | `video_bilingual_zh.srt` |
 
-语言代码：`zh`=中文、`en`=英语、`ja`=日语、`fr`=法语、`de`=德语 等（遵循 ISO 639-1 标准）。
+语言代码遵循 ISO 639-1 标准：`zh`=中文、`en`=英语、`ja`=日语、`fr`=法语、`de`=德语等。
 
-## 依赖说明
+### 依赖说明
 
 | 包 | 用途 |
-|----|------|
+|---|---|
 | `PySide6` | GUI 界面框架 |
-| `ollama` | Ollama API 客户端 |
-| `httpx` | HTTP 客户端（llama.cpp/LM-Studio API） |
+| `httpx` | HTTP 客户端，用于后端 API 调用 |
 | `srt` | SRT 字幕文件解析与生成 |
 
-## 许可证
+### 许可证
 
 MIT License
