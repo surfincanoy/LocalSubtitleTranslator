@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎬 SRT Subtitle Translation Tool
+# 🎬 LocalSubtitleTranslator
 # SRT 字幕翻译工具
 
 ![Python](https://img.shields.io/badge/Python-3.12+-blue?logo=python&logoColor=white)
@@ -54,7 +54,7 @@ A PySide6 GUI tool for batch-translating SRT subtitle files between Chinese and 
 
 ```bash
 # Clone or download the project
-cd HYMT
+cd LocalSubtitleTranslator
 
 # Create virtual environment
 uv venv --python 3.12
@@ -181,7 +181,7 @@ Each backend is configured independently. When you select a backend that hasn't 
 ## 📁 Project Structure
 
 ```
-HYMT/
+LocalSubtitleTranslator/
 ├── backend.py              # Translation backend (API calls, SRT parsing, concurrency)
 ├── gui.py                  # PySide6 GUI (main window, config windows, worker thread)
 ├── requirements.txt        # Python dependencies
@@ -253,7 +253,7 @@ MIT License
 
 ```bash
 # 克隆项目或下载 zip 包
-cd HYMT
+cd LocalSubtitleTranslator
 
 # 创建虚拟环境
 uv venv --python 3.12
@@ -380,7 +380,7 @@ uv run gui.py
 ## 📁 项目结构
 
 ```
-HYMT/
+LocalSubtitleTranslator/
 ├── backend.py              # 翻译后端（API 调用、SRT 解析、并发控制）
 ├── gui.py                  # PySide6 图形界面（主窗口、配置窗口、工作线程）
 ├── requirements.txt        # Python 依赖
