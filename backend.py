@@ -294,6 +294,8 @@ def translate_srt_file(
     with ThreadPoolExecutor(max_workers=batch_size) as executor:
         executor.map(translate_one, indices)
 
+    originals = [sub.content.strip() for sub in subs]
+
     new_subs = []
     for i, sub in enumerate(subs):
         if translations[i]:
@@ -312,7 +314,7 @@ def translate_srt_file(
 
     if mode == "bilingual":
         for i, sub in enumerate(new_subs):
-            orig = subs[i].content.strip()
+            orig = originals[i]
             trans = sub.content.strip()
             if reverse:
                 sub.content = f"{orig}\n{trans}"

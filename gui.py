@@ -444,9 +444,7 @@ class MainWindow(QMainWindow):
                 self.input_path.setText(f"已选择 {len(files)} 个文件")
             if not self.output_path.text():
                 parent = os.path.dirname(files[0])
-                self.output_path.setText(
-                    os.path.join(parent, "output").replace(os.sep, "/")
-                )
+                self.output_path.setText(parent.replace(os.sep, "/"))
 
     def _browse_output(self):
         folder = QFileDialog.getExistingDirectory(self, "选择输出文件夹")
